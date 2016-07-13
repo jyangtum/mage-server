@@ -46,7 +46,7 @@
     "mongodb-migrations": "0.8.5",
     "mongoose": "4.13.14",
     "multer": "0.1.x",
-    "passport": "0.1.x",
+    "passport": "0.3.2",
     "passport-anonymous": "1.0.1",
     "passport-google-oauth": "0.2.0",
     "passport-http-bearer": "0.2.x",
