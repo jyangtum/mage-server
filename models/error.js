@@ -14,8 +14,8 @@ exports.getErrors = function(callback) {
   });
 };
 
-exports.createError = function(error, callback) {
-  Error.create(error, function(err, newError) {
+exports.createError = function(error, callback) {  
+  Error.create({error: error}, function(err, newError) {
     if (err) return callback(err);
 
     callback(err, newError);
