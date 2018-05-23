@@ -12,7 +12,7 @@ var UserMongoModel = mongoose.model('User');
 require('sinon-mongoose');
 require('chai').should();
 
-describe.only("device route tests", function() {
+describe("device route tests", function() {
 
   var sandbox;
   before(function() {
