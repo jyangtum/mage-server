@@ -131,7 +131,7 @@ var mockEvent = {
   ]
 };
 
-describe.only("events route tests", function() {
+describe("events route tests", function() {
 
   var sandbox;
   var TokenModelMock;
