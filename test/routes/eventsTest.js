@@ -134,8 +134,13 @@ var mockEvent = {
 describe.only("events route tests", function() {
 
   var sandbox;
+  var TokenModelMock;
   before(function() {
     sandbox = sinon.sandbox.create();
+  });
+
+  beforeEach(function() {
+    TokenModelMock = sandbox.mock(TokenModel);
   });
 
   afterEach(function() {
@@ -144,12 +149,13 @@ describe.only("events route tests", function() {
 
   function mockTokenWithPermission(permission) {
     var mockToken = MockToken(userId, [permission]);
-    sandbox.mock(TokenModel)
-      .expects('findOne')
+
+    TokenModelMock.expects('findOne')
       .withArgs({token: "12345"})
       .chain('populate', 'userId')
       .chain('exec')
       .yields(null, mockToken);
+
     return mockToken;
   }
 
@@ -448,41 +454,48 @@ describe.only("events route tests", function() {
     });
   });
 
-  // describe('/api/events/{eventId}/forms route tests', function() {
-  //   it.only('should add a form to the event', function(done) {
-  //     var mockToken = mockTokenWithPermission('UPDATE_EVENT');
-  //
-  //     var mockedEventModelClass = sandbox.mock(EventModel);
-  //     var mongoEvent = new EventMongoModel(mockEvent)
-  //     mockedEventModelClass.expects('getById').withArgs('1')
-  //       .yields(null, mongoEvent);
-  //
-  //     mockedEventModelClass.expects('addForm').withArgs(1, {name: 'name'})
-  //       .yields(null, mongoEvent.forms[0]);
-  //
-  //     sandbox.mock(api.Form.prototype)
-  //       .expects('populateUserFields')
-  //       .yields(null)
-  //       .once();
-  //
-  //     sandbox.mock(api.Icon.prototype)
-  //       .expects('saveDefaultIconToEventForm')
-  //       .yields(null)
-  //       .once();
-  //
-  //     request(app)
-  //       .post('/api/events/1/forms')
-  //       .set('Accept', 'application/json')
-  //       .set('Authorization', 'Bearer 12345')
-  //       .send({name: 'name'})
-  //       .expect('Content-Type', /json/)
-  //       .expect(201)
-  //       .expect(function(res) {
-  //         // console.log('res.error', res.error);
-  //         var formResponse = res.body;
-  //         formResponse.id.should.be.equal(form._id);
-  //       })
-  //       .end(done);
-  //   });
-  // });
+  describe('/api/events/{eventId}/forms route tests', function() {
+    it('should add a form to the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      // Since there are two POST routes and the second one is the one we are testing
+      // we need two mocks
+      TokenModelMock.expects('findOne')
+        .withArgs({token: "12345"})
+        .chain('populate', 'userId')
+        .chain('exec')
+        .yields(null, mockToken);
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('addForm').withArgs(1, {name: 'name'})
+        .yields(null, mongoEvent.forms[0]);
+
+      sandbox.mock(api.Form.prototype)
+        .expects('populateUserFields')
+        .yields(null)
+        .once();
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('saveDefaultIconToEventForm')
+        .yields(null)
+        .once();
+
+      request(app)
+        .post('/api/events/1/forms')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({name: 'name'})
+        .expect('Content-Type', /json/)
+        .expect(201)
+        .expect(function(res) {
+          var formResponse = res.body;
+          formResponse.id.should.be.equal(form._id);
+        })
+        .end(done);
+    });
+  });
 });
