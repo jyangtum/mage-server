@@ -1,4 +1,6 @@
 var request = require('supertest')
+  , fs = require('fs')
+  , path = require('path')
   , sinon = require('sinon')
   , app = require('../../express')
   , api = require('../../api')
@@ -33,7 +35,21 @@ var style = {
   "stroke": "#5278A2",
   "fillOpacity": 0.2,
   "strokeOpacity": 1,
-  "strokeWidth": 2
+  "strokeWidth": 2,
+  "Choice1": {
+    "fill": "#5278A2",
+    "stroke": "#5278A2",
+    "fillOpacity": 0.2,
+    "strokeOpacity": 1,
+    "strokeWidth": 2,
+    "None": {
+      "fill": "#5278A2",
+      "stroke": "#5278A2",
+      "fillOpacity": 0.2,
+      "strokeOpacity": 1,
+      "strokeWidth": 2
+    }
+  }
 };
 
 var teams = [
@@ -52,7 +68,7 @@ var teams = [
 
 var form = {
   "variantField": "field7",
-  "name": "Event 1",
+  "name": "Test",
   "color": "#71C4C7",
   "primaryField": "type",
   "fields": [
@@ -66,12 +82,12 @@ var form = {
         {
           "id": 0,
           "value": 0,
-          "title": "Choice 1"
+          "title": "Choice1"
         },
         {
           "id": 1,
           "value": 1,
-          "title": "Choice 2"
+          "title": "Choice2"
         }
       ]
     },
@@ -107,8 +123,9 @@ var form = {
     }
   ],
   "userFields": [],
+  "style": style,
   "archived": false,
-  "_id": 1
+  "_id": 2
 };
 
 var mockEvent = {
@@ -130,6 +147,14 @@ var mockEvent = {
     }
   ]
 };
+
+var mockIcons =[{
+  "eventId":1,
+  "formId":2,
+  "primary":null,
+  "variant":null,
+  "path":path.resolve(path.join(__dirname, '..', 'fixtures', 'defaultIcon.png'))
+}];
 
 describe("events route tests", function() {
 
@@ -424,6 +449,32 @@ describe("events route tests", function() {
         })
         .end(done);
     });
+
+    it('should add a team to an event', function(done){
+      mockTokenWithPermission('UPDATE_EVENT');
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent);
+
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('addTeam').withArgs(mongoEvent, {team: {id: '2'}})
+        .yields(null, new EventMongoModel(mockEvent));
+
+      request(app)
+        .post('/api/events/1/teams')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({team: {id: '2'}})
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.name.should.be.equal('Event 1');
+          sandbox.verify();
+        })
+        .end(done);
+    });
   });
 
   describe('/api/events/{id}/users route tests', function() {
@@ -471,7 +522,7 @@ describe("events route tests", function() {
       mockedEventModelClass.expects('getById').withArgs('1')
         .yields(null, mongoEvent);
 
-      mockedEventModelClass.expects('addForm').withArgs(1, {name: 'name'})
+      mockedEventModelClass.expects('addForm').withArgs(1, sinon.match({id: 2}))
         .yields(null, mongoEvent.forms[0]);
 
       sandbox.mock(api.Form.prototype)
@@ -488,7 +539,7 @@ describe("events route tests", function() {
         .post('/api/events/1/forms')
         .set('Accept', 'application/json')
         .set('Authorization', 'Bearer 12345')
-        .send({name: 'name'})
+        .send(mongoEvent.forms[0])
         .expect('Content-Type', /json/)
         .expect(201)
         .expect(function(res) {
@@ -497,5 +548,411 @@ describe("events route tests", function() {
         })
         .end(done);
     });
+
+    it('should upload a form to the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('addForm').withArgs(1, mongoEvent.forms[0])
+        .yields(null, mongoEvent.forms[0]);
+
+      var formMock = sandbox.mock(api.Form.prototype);
+
+      formMock.expects('validate')
+        .withArgs(sinon.match({ fieldname: 'form'}))
+        .yields(null, mongoEvent.forms[0])
+        .once();
+
+      formMock.expects('importIcons')
+        .withArgs(sinon.match({ fieldname: 'form'}))
+        .yields(null)
+        .once();
+
+      request(app)
+        .post('/api/events/1/forms')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .attach('form', path.resolve(__dirname + '/../fixtures/Event 1-Test-form.zip'))
+        .expect('Content-Type', /json/)
+        .expect(201)
+        .expect(function(res) {
+          var formResponse = res.body;
+          formResponse.id.should.be.equal(form._id);
+          sandbox.verify();
+        })
+        .end(done);
+    });
   });
+
+  describe('/api/events/{eventId}/forms/{formId} route tests', function() {
+    it('should update a form in the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('updateForm').withArgs(1, {name: 'name', _id: 2})
+        .yields(null, mongoEvent.forms[0]);
+
+      sandbox.mock(api.Form.prototype)
+        .expects('populateUserFields')
+        .yields(null)
+        .once();
+
+      request(app)
+        .put('/api/events/1/forms/2')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({name: 'name'})
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var formResponse = res.body;
+          formResponse.id.should.be.equal(form._id);
+        })
+        .end(done);
+    });
+
+    it('should get the form zip', function(done) {
+      var mockToken = mockTokenWithPermission('READ_EVENT_ALL');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.mock(api.Form.prototype)
+        .expects('export')
+        .yields(null, {
+          file:fs.createReadStream(__dirname + '/../fixtures/Event 1-Test-form.zip'),
+          name: 'Test'
+        })
+        .once();
+
+      request(app)
+        .get('/api/events/1/'+mongoEvent.forms[0].id+'/form.zip')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /application\/zip/)
+        .expect(200)
+        .expect(function(res) {
+          res.headers['content-disposition'].should.be.equal('attachment; filename="' + mongoEvent.name + '-' + mongoEvent.forms[0].name + '-form.zip"');
+        })
+        .end(done);
+    });
+
+    it('should get the icon zip', function(done) {
+      var mockToken = mockTokenWithPermission('READ_EVENT_ALL');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      fs.copyFileSync(__dirname + '/../fixtures/icons.zip', __dirname + '/../fixtures/tmpicons.zip')
+      sandbox.mock(api.Icon.prototype)
+        .expects('getZipPath')
+        .yields(null, path.resolve(__dirname + '/../fixtures/tmpicons.zip'))
+        .once();
+
+      request(app)
+        .get('/api/events/1/form/icons.zip')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /application\/zip/)
+        .expect(200)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id).should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+
+    it('should get the icon json', function(done) {
+      var mockToken = mockTokenWithPermission('READ_EVENT_ALL');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('getIcons')
+        .yields(null, mockIcons)
+        .once();
+
+      request(app)
+        .get('/api/events/1/icons/2.json')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id, '2').should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+
+    it('should get the icon for the primary and variant', function(done) {
+      var mockToken = mockTokenWithPermission('READ_EVENT_ALL');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('getIcon')
+        .yields(null, mockIcons[0])
+        .once();
+
+      request(app)
+        .get('/api/events/1/icons/2/high/blue')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /image/)
+        .expect(200)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id, '2', 'high', 'blue').should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+
+    it('should get the icon for the primary and variant as json', function(done) {
+      var mockToken = mockTokenWithPermission('READ_EVENT_ALL');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('getIcon')
+        .yields(null, mockIcons[0])
+        .once();
+
+      request(app)
+        .get('/api/events/1/icons/2/high/blue')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id, '2', 'high', 'blue').should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+
+    it('should post an icon', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('create')
+        .withArgs(sinon.match({ fieldname: 'icon'}))
+        .yields(null, mockIcons[0])
+        .once();
+
+      request(app)
+        .post('/api/events/1/icons/2/high/blue')
+        .set('Authorization', 'Bearer 12345')
+        .attach('icon', path.resolve(path.join(__dirname, '..', 'fixtures', 'defaultIcon.png')))
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id, '2', 'high', 'blue').should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+
+    it('should delete an icon', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById').withArgs('1')
+        .yields(null, mongoEvent);
+
+      sandbox.spy(api, 'Icon')
+
+      sandbox.mock(api.Icon.prototype)
+        .expects('delete')
+        .yields(null)
+        .once();
+
+      request(app)
+        .delete('/api/events/1/icons/2/high/blue')
+        .set('Authorization', 'Bearer 12345')
+        .expect(204)
+        .expect(function(res) {
+          api.Icon.calledWith(mockEvent._id, '2', 'high', 'blue').should.be.equal(true);
+          sandbox.verify();
+        })
+        .end(done);
+    });
+  });
+
+  describe('/api/events/{eventId}/teams/{teamId} route tests', function() {
+    it('should delete a team from the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById')
+        .withArgs('1')
+        .yields(null, mongoEvent);
+
+      var mockedTeamModelClass = sandbox.mock(TeamModel);
+      var mongoTeam = new TeamMongoModel(teams[0]);
+      mockedTeamModelClass.expects('getTeamById')
+        .withArgs(teams[0].id)
+        .yields(null, mongoTeam);
+
+      mockedEventModelClass.expects('removeTeam').withArgs(mongoEvent, mongoTeam)
+        .yields(null, mongoEvent);
+
+      request(app)
+        .delete('/api/events/1/teams/'+teams[0].id)
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.id.should.be.equal(mongoEvent._id);
+        })
+        .end(done);
+    });
+  });
+
+  describe('/api/events/{eventId}/layers route tests', function() {
+    it('should add a layer to the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById')
+        .withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('addLayer').withArgs(mongoEvent, {name: 'name'})
+        .yields(null, mongoEvent);
+
+      request(app)
+        .post('/api/events/1/layers')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({name: 'name'})
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.id.should.be.equal(1);
+        })
+        .end(done);
+    });
+  });
+
+  describe('/api/events/{eventId}/layers/{layerId} route tests', function() {
+    it('should delete a layer from the event', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById')
+        .withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('removeLayer').withArgs(mongoEvent, {id: '2'})
+        .yields(null, mongoEvent);
+
+      request(app)
+        .delete('/api/events/1/layers/2')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.id.should.be.equal(1);
+        })
+        .end(done);
+    });
+  });
+
+  describe('/api/events/{eventId}/acl/{id} route tests', function() {
+    it('should update a user in the acl', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById')
+        .withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('updateUserInAcl').withArgs(mongoEvent._id, '2', 'read')
+        .yields(null, mongoEvent);
+
+      request(app)
+        .put('/api/events/1/acl/2')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({role: 'read'})
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.id.should.be.equal(1);
+        })
+        .end(done);
+    });
+
+    it('should delete a user from the acl', function(done) {
+      var mockToken = mockTokenWithPermission('UPDATE_EVENT');
+
+      var mockedEventModelClass = sandbox.mock(EventModel);
+      var mongoEvent = new EventMongoModel(mockEvent)
+      mockedEventModelClass.expects('getById')
+        .withArgs('1')
+        .yields(null, mongoEvent);
+
+      mockedEventModelClass.expects('removeUserFromAcl').withArgs(mongoEvent._id, '2')
+        .yields(null, mongoEvent);
+
+      request(app)
+        .delete('/api/events/1/acl/2')
+        .set('Accept', 'application/json')
+        .set('Authorization', 'Bearer 12345')
+        .send({role: 'read'})
+        .expect('Content-Type', /json/)
+        .expect(200)
+        .expect(function(res) {
+          var event = res.body;
+          event.id.should.be.equal(1);
+        })
+        .end(done);
+    });
+  });
+
 });
