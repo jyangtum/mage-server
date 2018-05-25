@@ -657,22 +657,27 @@ describe("events route tests", function() {
 
       sandbox.spy(api, 'Icon')
 
-      fs.copyFileSync(__dirname + '/../fixtures/icons.zip', __dirname + '/../fixtures/tmpicons.zip')
-      sandbox.mock(api.Icon.prototype)
-        .expects('getZipPath')
-        .yields(null, path.resolve(__dirname + '/../fixtures/tmpicons.zip'))
-        .once();
+      var writeStream = fs.createWriteStream(__dirname + '/../fixtures/tmpicons.zip');
+      writeStream.on('finish', function() {
+        sandbox.mock(api.Icon.prototype)
+          .expects('getZipPath')
+          .yields(null, path.resolve(__dirname + '/../fixtures/tmpicons.zip'))
+          .once();
 
-      request(app)
-        .get('/api/events/1/form/icons.zip')
-        .set('Authorization', 'Bearer 12345')
-        .expect('Content-Type', /application\/zip/)
-        .expect(200)
-        .expect(function(res) {
-          api.Icon.calledWith(mockEvent._id).should.be.equal(true);
-          sandbox.verify();
-        })
-        .end(done);
+        request(app)
+          .get('/api/events/1/form/icons.zip')
+          .set('Authorization', 'Bearer 12345')
+          .expect('Content-Type', /application\/zip/)
+          .expect(200)
+          .expect(function(res) {
+            api.Icon.calledWith(mockEvent._id).should.be.equal(true);
+            sandbox.verify();
+          })
+          .end(done);
+      });
+
+      fs.createReadStream(__dirname + '/../fixtures/icons.zip').pipe(writeStream);
+
     });
 
     it('should get the icon json', function(done) {
