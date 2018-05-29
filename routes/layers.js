@@ -84,7 +84,6 @@ module.exports = function(app, security) {
     access.authorize('READ_LAYER_ALL'),
     function (req, res) {
       if (req.layer.type !== 'Feature') return res.status(400).send('cannot get features, layer type is not "Feature"');
-
       new api.Feature(req.layer).getAll(function(err, features) {
         features = features.map(function(f) { return f.toJSON(); });
         res.json({
@@ -183,7 +182,7 @@ module.exports = function(app, security) {
           response.success = false;
           response.message = err;
         } else {
-          response.succes = true;
+          response.success = true;
           response.message = 'Layer ' + layer.name + ' has been removed.';
         }
 
