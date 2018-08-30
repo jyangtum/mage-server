@@ -644,7 +644,7 @@ exports.addForm = function(eventId, form, callback) {
           return f._id === form._id;
         });
 
-        callback(err, forms.length ? forms[0] : null);
+        callback(err, event, forms.length ? forms[0] : null);
       });
     })
     .catch(err => callback(err));
@@ -664,7 +664,7 @@ exports.updateForm = function(event, form, callback) {
       return f._id === form._id;
     });
 
-    callback(err, forms.length ? forms[0] : null);
+    callback(err, event, forms.length ? forms[0] : null);
   });
 };
 
